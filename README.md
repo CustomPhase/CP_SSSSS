@@ -1,4 +1,4 @@
-# CP_SSSSS
+# Custom Phase Screen-Space Subsurface Scattering
 Naive screen-space subsurface scattering solution for Unity 5.<br><br>
 <img src="http://customphase.ru/download/img/CP_SSSSS_1.PNG" alt="In action" width="360"/> <br>
 Animated gif: http://imgur.com/Nc8VyDv
