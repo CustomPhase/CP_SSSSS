@@ -1,6 +1,6 @@
 # CP_SSSSS
 Naive screen-space subsurface scattering solution for Unity 5.<br><br>
-<img src="http://customphase.ru/download/img/CP_SSSSS_1.PNG" alt="In action" width="300"/> <br>
+<img src="http://customphase.ru/download/img/CP_SSSSS_1.PNG" alt="In action" width="360"/> <br>
 Animated gif: http://imgur.com/Nc8VyDv
 
 <h3>Tested only in Unity 5.4.2, deferred, linear, HDR. Use at your own risk.</h3>
