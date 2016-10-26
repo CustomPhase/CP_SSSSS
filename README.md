@@ -18,7 +18,7 @@ Animated gif: http://imgur.com/Nc8VyDv
 <ol>
 <li>Blur the source image separably, based on the distance from the camera, and attenuate surrounding sample's influence based on the depth difference between this sample and the center sample (Soft Depth Bias parameter controls the maximum dpeth difference allowed)</li>
 <li>Render the scene with replaced shader, using the mask set in CP_SSSSS_Object script multiplied by the subsurface color</li>
-<li>Composite the blurred stuff, multiplying it by mask from step 2, and substracting the original based on the Affect Direct parameter<li>
+<li>Composite the blurred stuff, multiplying it by mask from step 2, and substracting the original based on the Affect Direct parameter</li>
 </ol>
 
 <hr>
