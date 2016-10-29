@@ -4,7 +4,7 @@ Naive screen-space subsurface scattering solution for Unity 5.<br><br>
 Animated gif: http://imgur.com/Nc8VyDv
 
 <h3>Tested only in Unity 5.4.2, works with deferred/forward, gamma/linear, HDR/LDR, DX11/DX9.</h3>
-<h3>Scene view previewing and previewing in edit mode are disabled until i figure out a better way to deal with materials and per-object properties.</h3>
+<h3>Scattering distance depends on main camera's near and far clip plane, if you are having problems try adjusting those.</h3>
 
 <h1>How to use:</h1>
 <ol>
