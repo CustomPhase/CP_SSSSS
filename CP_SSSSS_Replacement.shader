@@ -48,7 +48,7 @@
 			fixed4 frag (v2f i) : SV_Target
 			{
 				// sample the texture
-				fixed4 col = 1;
+				fixed4 col = fixed4(1,1,1,1);
 				if (_MaskSource == 0) col = tex2D(_MainTex, i.uv);
 				if (_MaskSource == 1) col = tex2D(_MaskTex, i.uv);
 				return _SSColor*col.a;

@@ -1,6 +1,9 @@
 ﻿using UnityEngine;
 using System.Collections;
+using UnityStandardAssets.ImageEffects;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 
 public enum CP_SSSSS_MaskSource
 {
@@ -9,6 +12,7 @@ public enum CP_SSSSS_MaskSource
 	wholeObject = 2
 }
 
+[ExecuteInEditMode]
 [RequireComponent(typeof(Renderer))]
 public class CP_SSSSS_Object : MonoBehaviour {
 
@@ -16,6 +20,11 @@ public class CP_SSSSS_Object : MonoBehaviour {
 	public Color subsurfaceColor = new Color(1,0.2f,0.1f,0);
 	public CP_SSSSS_MaskSource maskSource = CP_SSSSS_MaskSource.mainTexture;
 	public Texture2D maskTex;
+	
+	private CP_SSSSS_Main mainScript;
+	private Material propertiesHostMat;
+	private Material previousMat;
+	
 	Renderer r;
 
 	// Use this for initialization
@@ -23,15 +32,36 @@ public class CP_SSSSS_Object : MonoBehaviour {
 		r = GetComponent<Renderer>();
 		//r.material.SetTexture("_SSMask", skinMask);
 	}
-	
-	// Update is called once per frame
-	void Update () {
-		UpdateSSS();
+
+	void OnWillRenderObject()
+	{
+		//Before the object is rendered
+
+		//We store per-object SSS settings in material copies on each affected renderer's SSSSS_Object script (propertiesHostMat)
+		//We use camera events so that SSS objects could swap between the properties host and original materials when rendering the mask
+		//This way we can avoid original materials getting instantiated
+
+		if (mainScript == null)
+		{
+			mainScript = Object.FindObjectOfType<CP_SSSSS_Main>();
+		}
+
+		if (mainScript != null)
+		{
+			if (Camera.current.name == mainScript.camName)
+			{
+				SubstituteMaterial();
+				UpdateSSS();
+				Camera.onPostRender -= RevertMaterial;
+				Camera.onPostRender += RevertMaterial;
+			}
+		}
 	}
 
 	void OnDisable()
 	{
-		r.material.SetColor("_SSColor", Color.black);
+		if (propertiesHostMat!=null)
+		propertiesHostMat.SetColor("_SSColor", Color.black);
 	}
 
 	void OnEnable()
@@ -41,13 +71,45 @@ public class CP_SSSSS_Object : MonoBehaviour {
 
 	void UpdateSSS()
 	{
+		if (mainScript == null)
+		{
+			mainScript = Object.FindObjectOfType<CP_SSSSS_Main>();
+		}
+
 		if (r == null) r = GetComponent<Renderer>();
-		r.material.SetColor("_SSColor", subsurfaceColor);
-		r.material.SetInt("_MaskSource", (int)maskSource);
+
+		if (propertiesHostMat == null)
+		{
+			propertiesHostMat = new Material(Shader.Find("Standard"));
+		}
+		propertiesHostMat.SetColor("_SSColor", subsurfaceColor);
+		propertiesHostMat.SetInt("_MaskSource", (int)maskSource);
 		if (maskSource==CP_SSSSS_MaskSource.separateTexture)
 		{
-			r.material.SetTexture("_MaskTex", maskTex);
+			propertiesHostMat.SetTexture("_MaskTex", maskTex);
 		}
+	}
+
+	void SubstituteMaterial()
+	{
+		if (r == null) r = GetComponent<Renderer>();
+		if (r != null) {
+			previousMat = r.sharedMaterial;
+			r.sharedMaterial = propertiesHostMat;
+		}
+	}
+
+	void RevertMaterial(Camera cam)
+	{
+		if (cam.name == mainScript.camName)
+		{
+			if (r == null) r = GetComponent<Renderer>();
+			if (r != null && previousMat != null)
+			{
+				r.sharedMaterial = previousMat;
+			}
+		}
+		Camera.onPostRender -= RevertMaterial;
 	}
 }
 
@@ -57,19 +119,43 @@ public class CP_SSSSS_Object : MonoBehaviour {
 public class CP_SSSSS_Object_Editor : Editor
 {
 	string[] maskSourceNames = { "Main texture from current material (A)", "Separate texture (A)", "No mask, whole object is translucent" };
+	SerializedObject e_object;
+	SerializedProperty e_subsurfaceColor;
+	SerializedProperty e_maskSource;
+
+	void OnEnable()
+	{
+		e_object = new SerializedObject(target);
+		e_subsurfaceColor = e_object.FindProperty("subsurfaceColor");
+		e_maskSource = e_object.FindProperty("maskSource");
+	}
+
 	public override void OnInspectorGUI()
 	{
 		CP_SSSSS_Object myScript = target as CP_SSSSS_Object;
+		if (e_object == null)
+		{
+			e_object = new SerializedObject(target);
+			e_subsurfaceColor = e_object.FindProperty("subsurfaceColor");
+			e_maskSource = e_object.FindProperty("maskSource");
+		}
 
-		myScript.subsurfaceColor = EditorGUILayout.ColorField("Subsurface color", myScript.subsurfaceColor);
+		EditorGUILayout.PropertyField(e_subsurfaceColor, new GUIContent("Subsurface color:"), true);
 
-		//myScript.maskSource = (CP_SSSSS_MaskSource)EditorGUILayout.EnumPopup("Subsurface mask source:", myScript.maskSource);
-		myScript.maskSource = (CP_SSSSS_MaskSource)EditorGUILayout.Popup("Subsurface mask source:", (int)myScript.maskSource, maskSourceNames);
+		CP_SSSSS_MaskSource msksrc = (CP_SSSSS_MaskSource)EditorGUILayout.Popup("Subsurface mask source:", (int)myScript.maskSource, maskSourceNames);
+		if (msksrc != myScript.maskSource)
+		{
+			//Undo.RecordObject(target, "inspector");
+			myScript.maskSource = msksrc;
+			e_maskSource.enumValueIndex = (int)msksrc;
+		}
 
 		if (myScript.maskSource==CP_SSSSS_MaskSource.separateTexture)
 		{
 			myScript.maskTex = (Texture2D)EditorGUILayout.ObjectField("Mask texture (A):", myScript.maskTex, typeof(Texture2D), false);
 		}
+
+		e_object.ApplyModifiedProperties();
 
 	}
 }

@@ -48,11 +48,14 @@
 			float _SoftDepthBias;
 
 			inline float SAMPLE_INVERSE_DEPTH(float2 uvs) {
-				return saturate(1.0 - (tex2D(_CameraDepthTexture, uvs).r*1));
+				float t = unity_CameraProjection._m11;
+				//float z = tex2D(_CameraDepthTexture, uvs).r * 1 - _ProjectionParams.y/_ProjectionParams.z;
+				//float z = tex2D(_CameraDepthTexture, uvs).r * 1;
+				return saturate(1.0 - (tex2D(_CameraDepthTexture, uvs).r * 1))*t;
 			}
 
 			inline float SAMPLE_INVERSE_DEPTH_LINEAR(float2 uvs) {
-				return saturate(1.0 - Linear01Depth(tex2D(_CameraDepthTexture, uvs).r * 1));
+				return saturate(1.0 - Linear01Depth(tex2D(_CameraDepthTexture, uvs).r));
 			}
 
 			float4 frag (v2f i) : SV_Target
@@ -134,6 +137,7 @@
 				float fac = 1-pow(saturate(max(max(src.r, src.g), src.b) * 1), 0.5);
 				float4 blr = tex2D(_BlurTex, i.uv);
 				//return blr;
+				//return mask;
 				blr = clamp(blr - src*_PreserveOriginal, 0, 50);
 				blr *= mask;
 				return src+blr*fac*_EffectStr;
