@@ -3,15 +3,13 @@ Naive screen-space subsurface scattering solution for Unity 5.<br><br>
 <img src="http://customphase.ru/download/img/CP_SSSSS_1.PNG" alt="In action" width="360"/> <br>
 Animated gif: http://imgur.com/Nc8VyDv
 
-<h3>Tested only in Unity 5.4.2, works with deferred/forward, gamma/linear, HDR/LDR, DX11/DX9.</h3>
-<h3>Scattering distance depends on main camera's near and far clip plane, if you are having problems try adjusting those.</h3>
+<h3>Tested only in Unity 5.4.2, works with deferred/forward, gamma/linear, HDR/LDR, DX11/DX9, perspective/ortho.</h3>
 
 <h1>How to use:</h1>
 <ol>
 <li>Put the files into any folder in your .../Assets/Resources folder</li>
 <li>Attach the CP_SSSSS_Main script to your main camera</li>
 <li>Attach CP_SSSSS_Object script to any Renderer object that you want to have subsurface scattering on</li>
-<li>Start the game to see the effect in action</li>
 </ol>
 
 <h1>Basic idea behind algorithm:</h1>

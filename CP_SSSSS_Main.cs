@@ -88,6 +88,7 @@ public class CP_SSSSS_Main : MonoBehaviour
 		}
 
 		RenderMasks();
+		material.SetTexture("_MaskTex", maskTexture);
 
 		tempBlur = RenderTexture.GetTemporary(source.width / downscale, source.height / downscale, source.depth, source.format);
 		tempBlur2 = RenderTexture.GetTemporary(source.width / downscale, source.height / downscale, source.depth, source.format);
@@ -115,7 +116,6 @@ public class CP_SSSSS_Main : MonoBehaviour
 
 		//Combine
 		material.SetTexture("_BlurTex", tempBlur2);
-		material.SetTexture("_MaskTex", maskTexture);
 		material.SetFloat("_EffectStr", scatterIntensity);
 		material.SetFloat("_PreserveOriginal", 1-affectDirect);
 		Graphics.Blit(source, destination, material, 1);
@@ -128,6 +128,8 @@ public class CP_SSSSS_Main : MonoBehaviour
 	void RenderMasks()
 	{
 		CheckCamera();
+		//Hack to remove the "Screen position out of view frustum" error on Unity startup
+		if (Camera.current!=null)
 		maskRenderCamera.Render();
 	}
 

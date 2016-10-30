@@ -43,15 +43,19 @@
 			
 			sampler2D _MainTex;
 			sampler2D_float _CameraDepthTexture;
+			sampler2D _MaskTex;
 			fixed4 _BlurVec;
 			float _BlurStr;
 			float _SoftDepthBias;
 
 			inline float SAMPLE_INVERSE_DEPTH(float2 uvs) {
 				float t = unity_CameraProjection._m11;
-				//float z = tex2D(_CameraDepthTexture, uvs).r * 1 - _ProjectionParams.y/_ProjectionParams.z;
-				//float z = tex2D(_CameraDepthTexture, uvs).r * 1;
-				return saturate(1.0 - (tex2D(_CameraDepthTexture, uvs).r * 1))*t;
+				float z = LinearEyeDepth(tex2D(_CameraDepthTexture, uvs).r);
+				/*
+				Voodoo math on visible size multiplier here that i dont understand, but it works
+				*/
+				float size = 0.5/(z + 0.5);
+				return size*t*0.6;
 			}
 
 			inline float SAMPLE_INVERSE_DEPTH_LINEAR(float2 uvs) {
@@ -60,6 +64,10 @@
 
 			float4 frag (v2f i) : SV_Target
 			{
+				//If theres nothing in the mask texture, then we dont need to blur/process it
+				float4 testMask = tex2D(_MaskTex, i.uv);
+				if (testMask.r + testMask.g + testMask.b < 0.005) discard;
+
 				float4 col = tex2D(_MainTex, i.uv);
 				fixed2 blurvec = _BlurVec.xy;
 				float d = SAMPLE_INVERSE_DEPTH(i.uv);
@@ -89,7 +97,7 @@
 				//We multiply the depth sample vector by a 1.06 to get rid of the 1 pixel wide lines, 
 				//that show up on the edges where the depth difference between samples is significant, 
 				//i have no clue whats causing it and how to fix it properly :(
-				for (uint n = 1; n <= 3; n++) {
+				for (uint n = 1; n <= 2; n++) {
 					float contrib_base = 0.99 / (n + 2);
 
 					float4 colr = tex2D(_MainTex, i.uv + blurvec * n * str);

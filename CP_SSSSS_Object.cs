@@ -82,6 +82,8 @@ public class CP_SSSSS_Object : MonoBehaviour {
 		{
 			propertiesHostMat = new Material(Shader.Find("Standard"));
 		}
+		if (previousMat != null)
+			propertiesHostMat.SetTexture("_MainTex", previousMat.mainTexture);
 		propertiesHostMat.SetColor("_SSColor", subsurfaceColor);
 		propertiesHostMat.SetInt("_MaskSource", (int)maskSource);
 		if (maskSource==CP_SSSSS_MaskSource.separateTexture)
