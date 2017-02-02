@@ -1,6 +1,5 @@
 ﻿using UnityEngine;
 using System.Collections;
-using UnityStandardAssets.ImageEffects;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif

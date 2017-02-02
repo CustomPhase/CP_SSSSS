@@ -117,6 +117,7 @@
 					sum += cont;
 				}
 				col.rgb /= sum;
+				//return testMask;
 				return col;
 				//return pow(sum*0.5, 6);
 			}
@@ -146,6 +147,7 @@
 				float4 blr = tex2D(_BlurTex, i.uv);
 				//return blr;
 				//return mask;
+				//return src;
 				blr = clamp(blr - src*_PreserveOriginal, 0, 50);
 				blr *= mask;
 				return src+blr*fac*_EffectStr;
