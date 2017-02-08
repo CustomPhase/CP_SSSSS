@@ -21,8 +21,8 @@ public class CP_SSSSS_Object : MonoBehaviour {
 	public Texture2D maskTex;
 	
 	private CP_SSSSS_Main mainScript;
-	private Material propertiesHostMat;
-	private Material previousMat;
+	private Material[] propertiesHostMat;
+	private Material[] previousMat;
 	
 	Renderer r;
 
@@ -30,6 +30,12 @@ public class CP_SSSSS_Object : MonoBehaviour {
 	void Start () {
 		r = GetComponent<Renderer>();
 		//r.material.SetTexture("_SSMask", skinMask);
+	}
+
+	public Renderer GetRenderer()
+	{
+		if (r == null) r = GetComponent<Renderer>();
+		return r;
 	}
 
 	void OnWillRenderObject()
@@ -43,6 +49,26 @@ public class CP_SSSSS_Object : MonoBehaviour {
 		if (mainScript == null)
 		{
 			mainScript = Object.FindObjectOfType<CP_SSSSS_Main>();
+		}
+
+		if (r == null) r = GetComponent<Renderer>();
+
+		if (previousMat==null || previousMat.Length!=r.sharedMaterials.Length)
+		{
+			previousMat = new Material[r.sharedMaterials.Length];
+			for (int i = 0; i<previousMat.Length; i++)
+			{
+				previousMat[i] = r.sharedMaterials[i];
+			}
+		}
+
+		if (propertiesHostMat==null || propertiesHostMat.Length!=r.sharedMaterials.Length)
+		{
+			propertiesHostMat = new Material[r.sharedMaterials.Length];
+			for (int i = 0; i < r.sharedMaterials.Length; i++)
+			{
+				propertiesHostMat[i] = new Material(Shader.Find("Standard"));
+			}
 		}
 
 		if (mainScript != null)
@@ -59,8 +85,16 @@ public class CP_SSSSS_Object : MonoBehaviour {
 
 	void OnDisable()
 	{
-		if (propertiesHostMat!=null)
-		propertiesHostMat.SetColor("_SSColor", Color.black);
+		if (propertiesHostMat != null)
+		{
+			foreach (Material mat in propertiesHostMat)
+			{
+				if (mat != null)
+				{
+					mat.SetColor("_SSColor", Color.black);
+				}
+			}
+		}
 	}
 
 	void OnEnable()
@@ -79,24 +113,41 @@ public class CP_SSSSS_Object : MonoBehaviour {
 
 		if (propertiesHostMat == null)
 		{
-			propertiesHostMat = new Material(Shader.Find("Standard"));
+			propertiesHostMat = new Material[r.sharedMaterials.Length];
+			for (int i = 0; i < r.sharedMaterials.Length; i++)
+			{
+				propertiesHostMat[i] = new Material(Shader.Find("Standard"));
+			}
 		}
 		if (previousMat != null)
-			propertiesHostMat.SetTexture("_MainTex", previousMat.mainTexture);
-		propertiesHostMat.SetColor("_SSColor", subsurfaceColor);
-		propertiesHostMat.SetInt("_MaskSource", (int)maskSource);
+		{
+			for (int i = 0; i<previousMat.Length; i++)
+			{
+				propertiesHostMat[i].SetTexture("_MainTex", previousMat[i].mainTexture);
+				//Debug.Log("Setting TEXTURE");
+			}
+		}
+		foreach (Material mat in propertiesHostMat)
+		{
+			mat.SetColor("_SSColor", subsurfaceColor);
+			mat.SetInt("_MaskSource", (int)maskSource);
+		}
 		if (maskSource==CP_SSSSS_MaskSource.separateTexture)
 		{
-			propertiesHostMat.SetTexture("_MaskTex", maskTex);
+			foreach (Material mat in propertiesHostMat)
+			{
+				mat.SetTexture("_MaskTex", maskTex);
+			}
 		}
 	}
 
 	void SubstituteMaterial()
 	{
 		if (r == null) r = GetComponent<Renderer>();
-		if (r != null) {
-			previousMat = r.sharedMaterial;
-			r.sharedMaterial = propertiesHostMat;
+		if (r != null)
+		{
+			previousMat = r.sharedMaterials;
+			r.sharedMaterials = propertiesHostMat;
 		}
 	}
 
@@ -107,7 +158,7 @@ public class CP_SSSSS_Object : MonoBehaviour {
 			if (r == null) r = GetComponent<Renderer>();
 			if (r != null && previousMat != null)
 			{
-				r.sharedMaterial = previousMat;
+				r.sharedMaterials = previousMat;
 			}
 		}
 		Camera.onPostRender -= RevertMaterial;
@@ -154,6 +205,11 @@ public class CP_SSSSS_Object_Editor : Editor
 		if (myScript.maskSource==CP_SSSSS_MaskSource.separateTexture)
 		{
 			myScript.maskTex = (Texture2D)EditorGUILayout.ObjectField("Mask texture (A):", myScript.maskTex, typeof(Texture2D), false);
+		}
+
+		if (myScript.maskSource==CP_SSSSS_MaskSource.separateTexture && myScript.GetRenderer().sharedMaterials.Length>1)
+		{
+			EditorGUILayout.HelpBox("WARNING: Separate texture mask source doesnt work with multimaterial objects", MessageType.Warning);
 		}
 
 		e_object.ApplyModifiedProperties();

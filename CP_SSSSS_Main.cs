@@ -110,8 +110,19 @@ public class CP_SSSSS_Main : MonoBehaviour
 		int blurRT2 = Shader.PropertyToID("_CPSSSSSBlur2");
 		int src = Shader.PropertyToID("_CPSSSSSSource");
 		buffer.SetGlobalTexture("_MaskTex", maskTexture);
-		buffer.GetTemporaryRT(blurRT1, -1, -1, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
-		buffer.GetTemporaryRT(blurRT2, -1, -1, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
+		int w = -1;
+		int h = -1;
+		Camera cam = Camera.current;
+		if (cam != null)
+		{
+			w = cam.pixelWidth / downscale;
+			h = cam.pixelHeight / downscale;
+		}
+
+		//buffer.GetTemporaryRT(blurRT1, -1, -1, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
+		buffer.GetTemporaryRT(blurRT1, w, h, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
+		//buffer.GetTemporaryRT(blurRT2, -1, -1, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
+		buffer.GetTemporaryRT(blurRT2, w, h, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
 		buffer.GetTemporaryRT(src, -1, -1, 24, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
 		buffer.SetGlobalFloat("_SoftDepthBias", softDepthBias * 0.05f * 0.2f);
 
@@ -122,7 +133,7 @@ public class CP_SSSSS_Main : MonoBehaviour
 		//multipass pass blur
 		for (int k = 1; k <= blurIterations; k++)
 		{
-			buffer.SetGlobalFloat("_BlurStr", Mathf.Clamp01(scatterDistance * 0.12f - k * 0.02f));
+			buffer.SetGlobalFloat("_BlurStr", Mathf.Clamp01(scatterDistance * 0.08f - k * 0.022f * scatterDistance));
 			buffer.SetGlobalVector("_BlurVec", new Vector4(1, 0, 0, 0));
 			buffer.Blit(blurRT2, blurRT1, material, 0);
 			buffer.SetGlobalVector("_BlurVec", new Vector4(0, 1, 0, 0));
@@ -133,7 +144,7 @@ public class CP_SSSSS_Main : MonoBehaviour
 			buffer.SetGlobalVector("_BlurVec", new Vector4(-1, 1, 0, 0).normalized);
 			buffer.Blit(blurRT1, blurRT2, material, 0);
 		}
-
+		
 		//buffer.Blit(blurRT2, blurBuf);
 
 		buffer.SetGlobalTexture("_BlurTex", blurRT2);

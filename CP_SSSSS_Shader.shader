@@ -147,6 +147,7 @@
 				float4 blr = tex2D(_BlurTex, i.uv);
 				//return blr;
 				//return mask;
+				//return src*0.5 + mask*0.5;
 				//return src;
 				blr = clamp(blr - src*_PreserveOriginal, 0, 50);
 				blr *= mask;
