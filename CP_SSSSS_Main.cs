@@ -88,7 +88,6 @@ public class CP_SSSSS_Main : MonoBehaviour
 	void OnPostRender()
 	{
 		TargetMeshes.Clear();
-		Shader.SetGlobalTexture("SSSMaskTexture", null);
 	}
 
 	public struct SSSParameter
