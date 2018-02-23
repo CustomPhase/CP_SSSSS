@@ -246,7 +246,7 @@ public class CP_SSSSS_Main : MonoBehaviour
 
 	public void AddMakeSSSMaskCommands(CommandBuffer buffer)
 	{
-		if(!Camera.current || TargetMeshes.Count == 0) return;
+		if(TargetMeshes.Count == 0) return;
 
 		for(int i = m_MaskMaterials.Count; i < TargetMeshes.Count; i++) {
 			if(maskShader != null) {
