@@ -67,15 +67,15 @@ public class CP_SSSSS_Main : MonoBehaviour
 			return;
 		}
 
+		CleanupBuffer();
+
 		// Disable the image effect if the shader can't
 		// run on the users graphics card
-		if (!shader || !shader.isSupported)
+		if(shader && !shader.isSupported)
 		{
 			enabled = false;
 			return;
 		}
-
-		CleanupBuffer();
 		if(buffer == null) ApplyBuffer();
 	}
 
