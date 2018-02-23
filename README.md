@@ -7,7 +7,7 @@ Animated gif: http://imgur.com/Nc8VyDv
 
 <h1>How to use:</h1>
 <ol>
-<li>Put the files into any folder in your .../Assets/Resources folder</li>
+<li>Put the files into any folder in your Assets/CP_SSSSS folder</li>
 <li>Attach the CP_SSSSS_Main script to your main camera</li>
 <li>Attach CP_SSSSS_Object script to any Renderer object that you want to have subsurface scattering on</li>
 </ol>

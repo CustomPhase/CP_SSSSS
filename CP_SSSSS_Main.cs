@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
-using System.Collections;
 using UnityEngine.Rendering;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(Camera))]
 #if UNITY_5_4_OR_NEWER
@@ -10,205 +10,282 @@ using UnityEngine.Rendering;
 [ExecuteInEditMode]
 public class CP_SSSSS_Main : MonoBehaviour
 {
-	public Shader shader;
-	public Shader maskReplacementShader;
-	RenderTexture sourceBuf;
-	RenderTexture blurBuf;
+    public Shader sssssShader;
+    public Shader sssMaskShader;
+    public Shader copyDepthShader;
 
-	CommandBuffer buffer;
-	CameraEvent camEvent = CameraEvent.BeforeImageEffectsOpaque;
+    [Range(1, 3)]
+    public int downscale = 1;
+    [Range(1, 3)]
+    public int blurIterations = 1;
+    [Range(0.01f, 1.6f)]
+    public float scatterDistance = 0.4f;
+    [Range(0f, 2f)]
+    public float scatterIntensity = 1f;
+    [Range(0.001f, 0.3f)]
+    public float softDepthBias = 0.05f;
+    [Range(0f, 1f)]
+    public float affectDirect = 1.0f;
 
-	private Material m_Material;
-	Material material
-	{
-		get
-		{
-			if (m_Material == null && shader != null)
-			{
-				m_Material = new Material(shader);
-				m_Material.hideFlags = HideFlags.HideAndDontSave;
-			}
-			return m_Material;
-		}
-	}
-		
-	[Range(1,3)]
-	public int downscale = 1;
-	[Range(1, 3)]
-	public int blurIterations = 1;
-	[Range(0.01f, 1.6f)]
-	public float scatterDistance = 0.4f;
-	[Range(0f,2f)]
-	public float scatterIntensity = 1f;
-	[Range(0.001f, 0.3f)]
-	public float softDepthBias = 0.05f;
-	[Range(0f, 1f)]
-	public float affectDirect = 0.5f;
+    public struct SSSParameter
+    {
+        public Texture scatteringMap;
+        public Vector2 scatteringMapOffset;
+        public Vector2 scatteringMapScale;
+        public Color scatteringColor;
+    }
+    
+    static int scatteringMapID = Shader.PropertyToID("ScatteringMap");
+    static int scatteringColorID = Shader.PropertyToID("ScatteringColor");
 
-	Camera maskRenderCamera;
-	RenderTexture maskTexture;
-	[HideInInspector]
-	public string camName = "SSSSSMaskRenderCamera";
-		
-	void OnDisable() {
-		if (m_Material)
-		{
-			DestroyImmediate(m_Material);
-		}
+    public static bool HasMaterialSSSParameter(Material material)
+    {
+        return material.HasProperty(scatteringColorID) && material.HasProperty(scatteringMapID);
+    }
 
-		if (maskTexture != null)
-			Object.DestroyImmediate(maskTexture);
-		if (sourceBuf != null)
-			Object.DestroyImmediate(sourceBuf);
-		if (blurBuf != null)
-			Object.DestroyImmediate(blurBuf);
+    public static SSSParameter MakeSSSParameterFromMaterial(Material material)
+    {
+        return new SSSParameter {
+            scatteringMap = material.GetTexture(scatteringMapID),
+            scatteringMapOffset = material.mainTextureOffset,
+            scatteringMapScale = material.mainTextureScale,
+            scatteringColor = material.GetColor(scatteringColorID),
+        };
+    }
 
-		m_Material = null;
-		maskTexture = null;
-		sourceBuf = null;
-		blurBuf = null;
+    public static SSSParameter MakeSSSParameterFromTextureAndColor(TextureAndColor src)
+    {
+        return new SSSParameter {
+            scatteringMap = src.texture,
+            scatteringMapOffset = Vector2.zero,
+            scatteringMapScale = Vector2.one,
+            scatteringColor = src.color,
+        };
+    }
 
-		CleanupBuffer();
-	}
+    public struct TargetMesh
+    {
+        public TargetMesh(Renderer renderer, int subMeshIndex, SSSParameter sssParameter)
+        {
+            this.renderer = renderer;
+            this.subMeshIndex = subMeshIndex;
+            this.sssParameter = sssParameter;
+        }
+        public Renderer renderer;
+        public int subMeshIndex;
+        public SSSParameter sssParameter;
+    }
 
-	void OnEnable()
-	{
-		if (!SystemInfo.supportsImageEffects)
-		{
-			enabled = false;
-			return;
-		}
+    List<TargetMesh> m_TargetMeshes = new List<TargetMesh>(256);
+    List<TargetMesh> TargetMeshes { get { return m_TargetMeshes; } }
 
-		// Disable the image effect if the shader can't
-		// run on the users graphics card
-		if (!shader || !shader.isSupported)
-			enabled = false;
+    public void AddRenderer(Renderer renderer, int subMeshIndex, SSSParameter sssParameter)
+    {
+        TargetMeshes.Add(new TargetMesh(renderer, subMeshIndex, sssParameter));
+    }
 
-		CleanupBuffer();
-		RenderMasks();
-		ApplyBuffer();
-		UpdateBuffer();
-	}
+    CommandBuffer sssssRenderBuffer;
 
-	private void OnPreRender()
-	{
-		RenderMasks();
-		if (buffer != null) UpdateBuffer();
-	}
+    List<Material> m_MaskMaterials = new List<Material>();
 
-	void ApplyBuffer()
-	{
-		buffer = new CommandBuffer();
-		buffer.name = "Screen Space Subsurface Scattering";
-		GetComponent<Camera>().AddCommandBuffer(camEvent, buffer);	
-	}
+    Material m_CopyDepthMaterial;
+    Material CopyDepthMaterial {
+        get {
+            if(m_CopyDepthMaterial == null && copyDepthShader) {
+                m_CopyDepthMaterial = new Material(copyDepthShader) {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+            return m_CopyDepthMaterial;
+        }
+    }
 
-	void UpdateBuffer()
-	{
-		buffer.Clear();
-		int blurRT1 = Shader.PropertyToID("_CPSSSSSBlur1");
-		int blurRT2 = Shader.PropertyToID("_CPSSSSSBlur2");
-		int src = Shader.PropertyToID("_CPSSSSSSource");
-		buffer.SetGlobalTexture("_MaskTex", maskTexture);
-		int w = -1;
-		int h = -1;
-		Camera cam = Camera.current;
-		if (cam != null)
-		{
-			w = cam.pixelWidth / downscale;
-			h = cam.pixelHeight / downscale;
-		}
+    Material m_SSSSSRenderMaterial;
+    Material SSSSSRenderMaterial {
+        get {
+            if(m_SSSSSRenderMaterial == null && sssssShader != null) {
+                m_SSSSSRenderMaterial = new Material(sssssShader) {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+            return m_SSSSSRenderMaterial;
+        }
+    }
 
-		//buffer.GetTemporaryRT(blurRT1, -1, -1, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
-		buffer.GetTemporaryRT(blurRT1, w, h, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
-		//buffer.GetTemporaryRT(blurRT2, -1, -1, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
-		buffer.GetTemporaryRT(blurRT2, w, h, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
-		buffer.GetTemporaryRT(src, -1, -1, 24, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
-		buffer.SetGlobalFloat("_SoftDepthBias", softDepthBias * 0.05f * 0.2f);
+    static Dictionary<Camera, CP_SSSSS_Main> instancies = new Dictionary<Camera, CP_SSSSS_Main>();
 
-		buffer.Blit(BuiltinRenderTextureType.CameraTarget, blurRT2);
-		//buffer.Blit(BuiltinRenderTextureType.CurrentActive, sourceBuf);
-		buffer.Blit(BuiltinRenderTextureType.CameraTarget, src);
+    static public CP_SSSSS_Main GetInstance(Camera camera)
+    {
+        if(instancies.ContainsKey(camera)) return instancies[camera];
+        return null;
+    }
+    
+    void Start()
+    {
+        instancies[GetComponent<Camera>()] = this;
+    }
 
-		//multipass pass blur
-		for (int k = 1; k <= blurIterations; k++)
-		{
-			buffer.SetGlobalFloat("_BlurStr", Mathf.Clamp01(scatterDistance * 0.08f - k * 0.022f * scatterDistance));
-			buffer.SetGlobalVector("_BlurVec", new Vector4(1, 0, 0, 0));
-			buffer.Blit(blurRT2, blurRT1, material, 0);
-			buffer.SetGlobalVector("_BlurVec", new Vector4(0, 1, 0, 0));
-			buffer.Blit(blurRT1, blurRT2, material, 0);
+    void OnDestroy()
+    {
+        Camera k = null;
+        foreach(var i in instancies) {
+            if(i.Value == this) {
+                k = i.Key;
+                break;
+            }
+        }
+        if(k) instancies.Remove(k);
+    }
 
-			buffer.SetGlobalVector("_BlurVec", new Vector4(1, 1, 0, 0).normalized);
-			buffer.Blit(blurRT2, blurRT1, material, 0);
-			buffer.SetGlobalVector("_BlurVec", new Vector4(-1, 1, 0, 0).normalized);
-			buffer.Blit(blurRT1, blurRT2, material, 0);
-		}
-		
-		//buffer.Blit(blurRT2, blurBuf);
+    void Reset()
+    {
+        sssssShader = Shader.Find("Hidden/CPSSSSSShader");
+        sssMaskShader = Shader.Find("Hidden/CPSSSSSMask");
+        copyDepthShader = Shader.Find("Hidden/CPSSSSSBlitDepthTextureToDepth");
+    }
 
-		buffer.SetGlobalTexture("_BlurTex", blurRT2);
-		buffer.SetGlobalFloat("_EffectStr", scatterIntensity);
-		buffer.SetGlobalFloat("_PreserveOriginal", 1 - affectDirect);
-		buffer.Blit(src, BuiltinRenderTextureType.CameraTarget, material, 1);
+    void OnEnable()
+    {
+        if(!SystemInfo.supportsImageEffects) {
+            enabled = false;
+            return;
+        }
 
-		buffer.ReleaseTemporaryRT(blurRT1);
-		buffer.ReleaseTemporaryRT(blurRT2);
-		buffer.ReleaseTemporaryRT(src);
-	}
+        // Disable the image effect if the shader can't
+        // run on the users graphics card
+        if(!sssssShader || !sssssShader.isSupported) {
+            enabled = false;
+            return;
+        }
 
-	void CleanupBuffer()
-	{
-		if (buffer!=null)
-		{
-			buffer.Clear();
-			GetComponent<Camera>().RemoveCommandBuffer(camEvent, buffer);
-			buffer = null;
-		}
-	}
+        if(sssssRenderBuffer == null) ApplySSSSSRenderBuffer();
+    }
 
-	void RenderMasks()
-	{
-		CheckCamera();
-		//Hack to remove the "Screen position out of view frustum" error on Unity startup
-		if (Camera.current!=null)
-		maskRenderCamera.Render();
-	}
+    void OnDisable()
+    {
+        if(m_CopyDepthMaterial) DestroyImmediate(m_CopyDepthMaterial);
+        foreach(var i in m_MaskMaterials) DestroyImmediate(i);
 
-	void CheckCamera()
-	{
-		if (maskRenderCamera==null)
-		{
-			GameObject camgo = GameObject.Find(camName);
-			if (camgo==null)
-			{
-				camgo = new GameObject(camName);
-				camgo.hideFlags = HideFlags.HideAndDontSave;
-				maskRenderCamera = camgo.AddComponent<Camera>();
-				maskRenderCamera.enabled = false;
-			} else
-			{
-				maskRenderCamera = camgo.GetComponent<Camera>();
-				maskRenderCamera.enabled = false;
-			}
-		}
+        m_MaskMaterials.Clear();
 
-		if (maskTexture==null)
-		{
-			Camera c = Camera.current;
-			if (c==null)
-			c = GetComponent<Camera>();
-			maskTexture = RenderTexture.GetTemporary(c.pixelWidth, c.pixelHeight, 16, RenderTextureFormat.ARGB32);
-		}
+        m_CopyDepthMaterial = null;
 
-		Camera cam = Camera.current;
+        if(m_SSSSSRenderMaterial) DestroyImmediate(m_SSSSSRenderMaterial);
+        m_SSSSSRenderMaterial = null;
 
-		if (cam == null) cam = Camera.main;
+        CleanupSSSSSRenderBuffer();
+    }
 
-		maskRenderCamera.CopyFrom(cam);
-		maskRenderCamera.renderingPath = RenderingPath.Forward;
-		maskRenderCamera.hdr = false;
-		maskRenderCamera.targetTexture = maskTexture;
-		maskRenderCamera.SetReplacementShader(maskReplacementShader, "RenderType");
-	}
+    void OnPreRender()
+    {
+        if(sssssRenderBuffer == null) ApplySSSSSRenderBuffer();
+        if(sssssRenderBuffer != null) UpdateSSSSSRenderBuffer();
+    }
+
+    void OnPostRender()
+    {
+        TargetMeshes.Clear();
+        Shader.SetGlobalTexture("SSSMaskTexture", null);
+    }
+        
+    void ApplySSSSSRenderBuffer()
+    {
+        sssssRenderBuffer = new CommandBuffer {
+            name = "Screen Space Subsurface Scattering"
+        };
+        GetComponent<Camera>().AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, sssssRenderBuffer);
+    }
+
+    void UpdateSSSSSRenderBuffer()
+    {
+        sssssRenderBuffer.Clear();
+            
+        if(!Camera.current || TargetMeshes.Count == 0) return;
+
+        AddMakeSSSMaskCommands(sssssRenderBuffer);
+
+        int blurRT1 = Shader.PropertyToID("SSSSSBlur1");
+        int blurRT2 = Shader.PropertyToID("SSSSSBlur2");
+        int src = Shader.PropertyToID("SSSSSSource");
+        int w = -1;
+        int h = -1;
+        Camera cam = Camera.current;
+        if(cam != null) {
+            w = cam.pixelWidth / downscale;
+            h = cam.pixelHeight / downscale;
+        }
+
+        sssssRenderBuffer.GetTemporaryRT(blurRT1, w, h, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
+        sssssRenderBuffer.GetTemporaryRT(blurRT2, w, h, 16, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
+        sssssRenderBuffer.GetTemporaryRT(src, -1, -1, 0, FilterMode.Bilinear, RenderTextureFormat.ARGBFloat);
+        sssssRenderBuffer.SetGlobalFloat("SoftDepthBias", softDepthBias * 0.05f * 0.2f);
+
+        sssssRenderBuffer.Blit(BuiltinRenderTextureType.CameraTarget, blurRT2);
+        sssssRenderBuffer.Blit(BuiltinRenderTextureType.CameraTarget, src);
+
+        //multipass pass blur
+        for(int k = 1; k <= blurIterations; k++) {
+            sssssRenderBuffer.SetGlobalFloat("BlurStr", Mathf.Clamp01(scatterDistance * 0.08f - k * 0.022f * scatterDistance));
+            sssssRenderBuffer.SetGlobalVector("BlurVec", new Vector4(1, 0, 0, 0));
+            sssssRenderBuffer.Blit(blurRT2, blurRT1, SSSSSRenderMaterial, 0);
+            sssssRenderBuffer.SetGlobalVector("BlurVec", new Vector4(0, 1, 0, 0));
+            sssssRenderBuffer.Blit(blurRT1, blurRT2, SSSSSRenderMaterial, 0);
+
+            sssssRenderBuffer.SetGlobalVector("BlurVec", new Vector4(1, 1, 0, 0).normalized);
+            sssssRenderBuffer.Blit(blurRT2, blurRT1, SSSSSRenderMaterial, 0);
+            sssssRenderBuffer.SetGlobalVector("BlurVec", new Vector4(-1, 1, 0, 0).normalized);
+            sssssRenderBuffer.Blit(blurRT1, blurRT2, SSSSSRenderMaterial, 0);
+        }
+
+        sssssRenderBuffer.SetGlobalTexture("BlurTex", blurRT2);
+        sssssRenderBuffer.SetGlobalFloat("EffectStr", scatterIntensity);
+        sssssRenderBuffer.SetGlobalFloat("PreserveOriginal", 1 - affectDirect);
+        sssssRenderBuffer.Blit(src, BuiltinRenderTextureType.CameraTarget, SSSSSRenderMaterial, 1);
+
+        sssssRenderBuffer.ReleaseTemporaryRT(blurRT1);
+        sssssRenderBuffer.ReleaseTemporaryRT(blurRT2);
+        sssssRenderBuffer.ReleaseTemporaryRT(src);
+    }
+
+    void CleanupSSSSSRenderBuffer()
+    {
+        if(sssssRenderBuffer != null) {
+            sssssRenderBuffer.Clear();
+            GetComponent<Camera>().RemoveCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, sssssRenderBuffer);
+            sssssRenderBuffer = null;
+        }
+    }
+
+    public void AddMakeSSSMaskCommands(CommandBuffer buffer)
+    {
+        if(!Camera.current || TargetMeshes.Count == 0) return;
+
+        for(int i = m_MaskMaterials.Count; i < TargetMeshes.Count; i++) {
+            if(sssMaskShader != null) {
+                var material = new Material(sssMaskShader) {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                m_MaskMaterials.Add(material);
+            }
+        }
+
+        if(m_MaskMaterials.Count < TargetMeshes.Count) return;
+
+        int maskRT = Shader.PropertyToID("SSSMaskTexture");
+        buffer.GetTemporaryRT(maskRT, -1, -1, 24, FilterMode.Bilinear, RenderTextureFormat.ARGB32);
+        buffer.Blit(BuiltinRenderTextureType.None, maskRT, CopyDepthMaterial);
+        buffer.SetRenderTarget(maskRT);
+
+        for(int i = 0; i < TargetMeshes.Count; i++) {
+            var ii = TargetMeshes[i];
+            var maskMaterial = m_MaskMaterials[i];
+            maskMaterial.mainTexture = ii.sssParameter.scatteringMap;
+            maskMaterial.mainTextureOffset = ii.sssParameter.scatteringMapOffset;
+            maskMaterial.mainTextureScale = ii.sssParameter.scatteringMapScale;
+            maskMaterial.SetColor(scatteringColorID, ii.sssParameter.scatteringColor);
+            buffer.DrawRenderer(ii.renderer, maskMaterial, ii.subMeshIndex);
+        }
+
+        buffer.SetGlobalTexture("SSSMaskTexture", maskRT);
+    }
 }
