@@ -1,10 +1,9 @@
-﻿Shader "Hidden/CPSSSSSReplacement"
+﻿Shader "Hidden/CPSSSSSMask"
 {
 	Properties
 	{
-		_MainTex("Texture", 2D) = "black" {}
-		_MaskTex("Texture", 2D) = "black" {}
-		_SSColor("Color", Color) = (0,0,0,0)
+		_MainTex("Texture", 2D) = "white" {}
+		ScatteringColor("Color", Color) = (0,0,0,1)
 	}
 	SubShader
 	{
@@ -13,6 +12,7 @@
 
 		Pass
 		{
+			ZWrite off
 			CGPROGRAM
 			#pragma vertex vert
 			#pragma fragment frag
@@ -33,9 +33,7 @@
 
 			sampler2D _MainTex;
 			float4 _MainTex_ST;
-			fixed4 _SSColor;
-			uint _MaskSource;
-			uniform sampler2D _MaskTex;
+			fixed4 ScatteringColor;
 			
 			v2f vert (appdata v)
 			{
@@ -47,11 +45,7 @@
 			
 			fixed4 frag (v2f i) : SV_Target
 			{
-				// sample the texture
-				fixed4 col = fixed4(1,1,1,1);
-				if (_MaskSource == 0) col = tex2D(_MainTex, i.uv);
-				if (_MaskSource == 1) col = tex2D(_MaskTex, i.uv);
-				return _SSColor*col.a;
+				return ScatteringColor * tex2D(_MainTex, i.uv);
 			}
 			ENDCG
 		}
@@ -96,6 +90,5 @@
 			ENDCG
 		}
 	}
-
 	//Fallback "Legacy Shaders/Diffuse"
 }

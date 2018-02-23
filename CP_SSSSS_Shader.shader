@@ -21,7 +21,7 @@
 		v2f vert(appdata v)
 		{
 			v2f o;
-			o.vertex = mul(UNITY_MATRIX_MVP, v.vertex);
+			o.vertex = UnityObjectToClipPos(v.vertex);
 			o.uv = v.uv;
 			return o;
 		}
@@ -66,12 +66,12 @@
 			{
 				//If theres nothing in the mask texture, then we dont need to blur/process it
 				float4 testMask = tex2D(_MaskTex, i.uv);
-				if (testMask.r + testMask.g + testMask.b < 0.005) discard;
+				if (testMask.a < 0.003 || testMask.r + testMask.g + testMask.b < 0.005) discard;
 
 				float4 col = tex2D(_MainTex, i.uv);
 				fixed2 blurvec = _BlurVec.xy;
 				float d = SAMPLE_INVERSE_DEPTH(i.uv);
-				float str = _BlurStr * d;
+				float str = _BlurStr * d * testMask.a;
 
 				float dlin = SAMPLE_INVERSE_DEPTH_LINEAR(i.uv);
 				if (dlin < 0.1) discard;
@@ -150,8 +150,8 @@
 				//return src*0.5 + mask*0.5;
 				//return src;
 				blr = clamp(blr - src*_PreserveOriginal, 0, 50);
-				blr *= mask;
-				return src+blr*fac*_EffectStr;
+				blr.rgb *= mask.rgb;
+				return src+blr*fac*_EffectStr*mask.a;
 			}
 			ENDCG
 		}
