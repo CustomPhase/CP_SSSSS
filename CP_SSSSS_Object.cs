@@ -37,7 +37,7 @@ public class CP_SSSSS_Object : MonoBehaviour {
 	{
 		if(r) {
 			var camera = Camera.current;
-			var sssssMain = CP_SSSSS_Main.GetInstance(camera);
+			var sssssMain = camera.gameObject.GetComponent<CP_SSSSS_Main>();
 			if(sssssMain && sssssMain.isActiveAndEnabled) {
 				if(Application.isPlaying) {
 					for(int i = 0; i < subMeshIndicies.Count; ++i) {

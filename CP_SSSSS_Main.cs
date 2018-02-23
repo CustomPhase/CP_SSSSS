@@ -161,39 +161,14 @@ public class CP_SSSSS_Main : MonoBehaviour
 			return m_CopyDepthMaterial;
 		}
 	}
-
-	static Dictionary<Camera, CP_SSSSS_Main> instancies = new Dictionary<Camera, CP_SSSSS_Main>();
-
-	static public CP_SSSSS_Main GetInstance(Camera camera)
-	{
-		if(instancies.ContainsKey(camera)) return instancies[camera];
-		return null;
-	}
-	
-	void Awake()
-	{
-		instancies[GetComponent<Camera>()] = this;
-	}
-
-	void OnDestroy()
-	{
-		Camera k = null;
-		foreach(var i in instancies) {
-			if(i.Value == this) {
-				k = i.Key;
-				break;
-			}
-		}
-		if(k) instancies.Remove(k);
-	}
-
+    
 	void Reset()
 	{
 		shader = Shader.Find("Hidden/CPSSSSSShader");
 		maskShader = Shader.Find("Hidden/CPSSSSSMask");
 		copyDepthShader = Shader.Find("Hidden/CPSSSSSBlitDepthTextureToDepth");
 	}
-		
+	
 	void ApplyBuffer()
 	{
 		buffer = new CommandBuffer();
@@ -205,7 +180,7 @@ public class CP_SSSSS_Main : MonoBehaviour
 	{
 		buffer.Clear();
 		
-		if(!Camera.current || TargetMeshes.Count == 0) return;
+		if(TargetMeshes.Count == 0) return;
 
 		AddMakeSSSMaskCommands(buffer);
 
