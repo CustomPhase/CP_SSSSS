@@ -1,220 +1,104 @@
 ﻿using UnityEngine;
-using System.Collections;
+using System.Collections.Generic;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-public enum CP_SSSSS_MaskSource
-{
-	mainTexture = 0,
-	separateTexture = 1,
-	wholeObject = 2
-}
-
 [ExecuteInEditMode]
 [RequireComponent(typeof(Renderer))]
 public class CP_SSSSS_Object : MonoBehaviour {
+	[Tooltip("Material has no Scattering Color Parameter, thease are used instead of. If Material has Scattering Color Parameter and you want to use it, stay empty.")]
+	public TextureAndColor[] scatteringColorsPerSubmesh;
 
-	//public Texture skinMask;
-	public Color subsurfaceColor = new Color(1,0.2f,0.1f,0);
-	public CP_SSSSS_MaskSource maskSource = CP_SSSSS_MaskSource.mainTexture;
-	public Texture2D maskTex;
-	
-	private CP_SSSSS_Main mainScript;
-	private Material[] propertiesHostMat;
-	private Material[] previousMat;
-	
 	Renderer r;
 
 	// Use this for initialization
 	void Start () {
 		r = GetComponent<Renderer>();
-		//r.material.SetTexture("_SSMask", skinMask);
-	}
-
-	public Renderer GetRenderer()
-	{
-		if (r == null) r = GetComponent<Renderer>();
-		return r;
-	}
-
-	void OnWillRenderObject()
-	{
-		//Before the object is rendered
-
-		//We store per-object SSS settings in material copies on each affected renderer's SSSSS_Object script (propertiesHostMat)
-		//We use camera events so that SSS objects could swap between the properties host and original materials when rendering the mask
-		//This way we can avoid original materials getting instantiated
-
-		if (mainScript == null)
-		{
-			mainScript = Object.FindObjectOfType<CP_SSSSS_Main>();
-		}
-
-		if (r == null) r = GetComponent<Renderer>();
-
-		if (previousMat==null || previousMat.Length!=r.sharedMaterials.Length)
-		{
-			previousMat = new Material[r.sharedMaterials.Length];
-			for (int i = 0; i<previousMat.Length; i++)
-			{
-				previousMat[i] = r.sharedMaterials[i];
-			}
-		}
-
-		if (propertiesHostMat==null || propertiesHostMat.Length!=r.sharedMaterials.Length)
-		{
-			propertiesHostMat = new Material[r.sharedMaterials.Length];
-			for (int i = 0; i < r.sharedMaterials.Length; i++)
-			{
-				propertiesHostMat[i] = new Material(Shader.Find("Standard"));
-			}
-		}
-
-		if (mainScript != null)
-		{
-			if (Camera.current.name == mainScript.camName)
-			{
-				SubstituteMaterial();
-				UpdateSSS();
-				Camera.onPostRender -= RevertMaterial;
-				Camera.onPostRender += RevertMaterial;
-			}
-		}
-	}
-
-	void OnDisable()
-	{
-		if (propertiesHostMat != null)
-		{
-			foreach (Material mat in propertiesHostMat)
-			{
-				if (mat != null)
-				{
-					mat.SetColor("_SSColor", Color.black);
+		parameters.Clear();
+		subMeshIndicies.Clear();
+		if(r) {
+			var sharedMaterials = r.sharedMaterials;
+			for(int i = 0; i < sharedMaterials.Length; ++i) {
+				var material = sharedMaterials[i];
+				if(i < scatteringColorsPerSubmesh.Length && scatteringColorsPerSubmesh[i].color != Color.black && material.renderQueue != (int)UnityEngine.Rendering.RenderQueue.Transparent) {
+					subMeshIndicies.Add(i);
+					parameters.Add(CP_SSSSS_Main.MakeSSSParameterFromTextureAndColor(scatteringColorsPerSubmesh[i]));
+				}
+				else if(CP_SSSSS_Main.HasMaterialSSSParameter(material) && material.renderQueue != (int)UnityEngine.Rendering.RenderQueue.Transparent) {
+					subMeshIndicies.Add(i);
+					parameters.Add(CP_SSSSS_Main.MakeSSSParameterFromMaterial(material));
 				}
 			}
 		}
 	}
 
-	void OnEnable()
+	void OnWillRenderObject()
 	{
-		UpdateSSS();
-	}
-
-	void UpdateSSS()
-	{
-		if (mainScript == null)
-		{
-			mainScript = Object.FindObjectOfType<CP_SSSSS_Main>();
-		}
-
-		if (r == null) r = GetComponent<Renderer>();
-
-		if (propertiesHostMat == null)
-		{
-			propertiesHostMat = new Material[r.sharedMaterials.Length];
-			for (int i = 0; i < r.sharedMaterials.Length; i++)
-			{
-				propertiesHostMat[i] = new Material(Shader.Find("Standard"));
-			}
-		}
-		if (previousMat != null)
-		{
-			for (int i = 0; i<previousMat.Length; i++)
-			{
-				propertiesHostMat[i].SetTexture("_MainTex", previousMat[i].mainTexture);
-				//Debug.Log("Setting TEXTURE");
-			}
-		}
-		foreach (Material mat in propertiesHostMat)
-		{
-			mat.SetColor("_SSColor", subsurfaceColor);
-			mat.SetInt("_MaskSource", (int)maskSource);
-		}
-		if (maskSource==CP_SSSSS_MaskSource.separateTexture)
-		{
-			foreach (Material mat in propertiesHostMat)
-			{
-				mat.SetTexture("_MaskTex", maskTex);
+		if(r) {
+			var camera = Camera.current;
+			var sssssMain = camera.gameObject.GetComponent<CP_SSSSS_Main>();
+			if(sssssMain && sssssMain.isActiveAndEnabled) {
+				if(Application.isPlaying) {
+					for(int i = 0; i < subMeshIndicies.Count; ++i) {
+						sssssMain.AddRenderer(r, subMeshIndicies[i], parameters[i]);
+					}
+				}
+				else {
+					var sharedMaterials = r.sharedMaterials;
+					for(int i = 0; i < sharedMaterials.Length; ++i) {
+						var material = sharedMaterials[i];
+						if(scatteringColorsPerSubmesh != null && i < scatteringColorsPerSubmesh.Length && scatteringColorsPerSubmesh[i].color != Color.black && material.renderQueue != (int)UnityEngine.Rendering.RenderQueue.Transparent) {
+							subMeshIndicies.Add(i);
+							sssssMain.AddRenderer(r, i, CP_SSSSS_Main.MakeSSSParameterFromTextureAndColor(scatteringColorsPerSubmesh[i]));
+						}
+						else if(CP_SSSSS_Main.HasMaterialSSSParameter(material) && material.renderQueue != (int)UnityEngine.Rendering.RenderQueue.Transparent) {
+							sssssMain.AddRenderer(r, i, CP_SSSSS_Main.MakeSSSParameterFromMaterial(material));
+						}
+					}
+				}
 			}
 		}
 	}
 
-	void SubstituteMaterial()
-	{
-		if (r == null) r = GetComponent<Renderer>();
-		if (r != null)
-		{
-			previousMat = r.sharedMaterials;
-			r.sharedMaterials = propertiesHostMat;
-		}
-	}
+	List<CP_SSSSS_Main.SSSParameter> parameters = new List<CP_SSSSS_Main.SSSParameter>();
+	List<int> subMeshIndicies = new List<int>();
 
-	void RevertMaterial(Camera cam)
+	void Reset()
 	{
-		if (cam.name == mainScript.camName)
-		{
-			if (r == null) r = GetComponent<Renderer>();
-			if (r != null && previousMat != null)
-			{
-				r.sharedMaterials = previousMat;
+		scatteringColorsPerSubmesh = new TextureAndColor[] {
+			new TextureAndColor {
+				texture = null,
+				color = new Color(1.0f, 0.2f, 0.1f, 1.0f)
 			}
-		}
-		Camera.onPostRender -= RevertMaterial;
+		};
 	}
+}
+
+[System.Serializable]
+public struct TextureAndColor
+{
+	public Texture texture;
+	public Color color;
 }
 
 #if UNITY_EDITOR
-
-[CustomEditor(typeof(CP_SSSSS_Object))]
-public class CP_SSSSS_Object_Editor : Editor
+[CustomPropertyDrawer(typeof(TextureAndColor))]
+public class TextureAndColorDrawer : PropertyDrawer
 {
-	string[] maskSourceNames = { "Main texture from current material (A)", "Separate texture (A)", "No mask, whole object is translucent" };
-	SerializedObject e_object;
-	SerializedProperty e_subsurfaceColor;
-	SerializedProperty e_maskSource;
-
-	void OnEnable()
+	public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
 	{
-		e_object = new SerializedObject(target);
-		e_subsurfaceColor = e_object.FindProperty("subsurfaceColor");
-		e_maskSource = e_object.FindProperty("maskSource");
-	}
+		EditorGUI.BeginProperty(position, label, property);
 
-	public override void OnInspectorGUI()
-	{
-		CP_SSSSS_Object myScript = target as CP_SSSSS_Object;
-		if (e_object == null)
-		{
-			e_object = new SerializedObject(target);
-			e_subsurfaceColor = e_object.FindProperty("subsurfaceColor");
-			e_maskSource = e_object.FindProperty("maskSource");
-		}
+		var textureRect = new Rect(position.x, position.y, 120, position.height);
+		var labelRect = new Rect(textureRect.x + textureRect.width, position.y, 70, position.height);
+		var colorRect = new Rect(labelRect.x + labelRect.width, position.y, 65, position.height);
 
-		EditorGUILayout.PropertyField(e_subsurfaceColor, new GUIContent("Subsurface color:"), true);
+		EditorGUI.PropertyField(textureRect, property.FindPropertyRelative("texture"), GUIContent.none);
+		EditorGUI.LabelField(labelRect, "SSS Map");
+		EditorGUI.PropertyField(colorRect, property.FindPropertyRelative("color"), GUIContent.none);
 
-		CP_SSSSS_MaskSource msksrc = (CP_SSSSS_MaskSource)EditorGUILayout.Popup("Subsurface mask source:", (int)myScript.maskSource, maskSourceNames);
-		if (msksrc != myScript.maskSource)
-		{
-			//Undo.RecordObject(target, "inspector");
-			myScript.maskSource = msksrc;
-			e_maskSource.enumValueIndex = (int)msksrc;
-		}
-
-		if (myScript.maskSource==CP_SSSSS_MaskSource.separateTexture)
-		{
-			myScript.maskTex = (Texture2D)EditorGUILayout.ObjectField("Mask texture (A):", myScript.maskTex, typeof(Texture2D), false);
-		}
-
-		if (myScript.maskSource==CP_SSSSS_MaskSource.separateTexture && myScript.GetRenderer().sharedMaterials.Length>1)
-		{
-			EditorGUILayout.HelpBox("WARNING: Separate texture mask source doesnt work with multimaterial objects", MessageType.Warning);
-		}
-
-		e_object.ApplyModifiedProperties();
-
+		EditorGUI.EndProperty();
 	}
 }
-
 #endif
