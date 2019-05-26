@@ -77,6 +77,10 @@ public class CP_SSSSS_Main : MonoBehaviour
 			return;
 		}
 		if(buffer == null) ApplyBuffer();
+
+		// cannot call Shader.PropertyToID() at compiler time, so let's do it here
+		scatteringMapID = Shader.PropertyToID("ScatteringMap");
+		scatteringColorID = Shader.PropertyToID("ScatteringColor");
 	}
 
 	private void OnPreRender()
@@ -98,8 +102,8 @@ public class CP_SSSSS_Main : MonoBehaviour
 		public Color scatteringColor;
 	}
 	
-	static int scatteringMapID = Shader.PropertyToID("ScatteringMap");
-	static int scatteringColorID = Shader.PropertyToID("ScatteringColor");
+	static int scatteringMapID; // = Shader.PropertyToID("ScatteringMap");
+	static int scatteringColorID; // = Shader.PropertyToID("ScatteringColor");
 
 	public static bool HasMaterialSSSParameter(Material material)
 	{
